@@ -11,6 +11,7 @@ from java.util import Base64
 from java.io import FileInputStream, ByteArrayInputStream
 import re
 
+PSD2_EXTENSION_NAME = "PSD2-Redsys"
 PSD2_EXTENSION_VERSION = "V.1.1"
 
 # Extrae el contenido de un archivo entre dos marcadores
@@ -155,7 +156,7 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
         self._helpers = callbacks.getHelpers()
 
         callbacks.setExtensionName("PSD2 Extension")
-        self._log("Extension PSD2 loaded. %s" % PSD2_EXTENSION_VERSION)
+        self._log("Extension %s loaded. %s" % (PSD2_EXTENSION_NAME, PSD2_EXTENSION_VERSION))
 
         # UI
         self.panel = JPanel()
