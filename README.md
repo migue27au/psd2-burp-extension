@@ -14,13 +14,15 @@ You can also configure static headers (PSU-IP-Address, TPP-Redirect-URI, TPP-Red
   - Static header values
   - Host header filter
   - Enable/disable switch
-- Adds (does not overwrite) Redsys headers to requests.
+  - Enable/disable overwrite Redsys headers.
+    - True --> Overwrite headers
+    - False --> Add headers (may duplicate headers)
 
 ## Installation
 
 1. Download the extension (.py).
-2. In burp: Extensions -> Add Jython 2.7 standalone.
-3. In Burp: Extensions -> Add extension "python".
+2. In burp: Extensions -> Extensions settings > Python Envionment > Add Jython 2.7 standalone JAR file.
+3. In Burp: Extensions -> Add extension > Type = "python".
 4. Select "psd2-extension.py" and load it.
 5. Configure it in the psd2-extension tab.
 
