@@ -11,7 +11,7 @@ from java.util import Base64
 from java.io import FileInputStream, ByteArrayInputStream
 import re
 
-PSD2_EXTENSION_VERSION = "V.1.0"
+PSD2_EXTENSION_VERSION = "V.1.1"
 
 # Extrae el contenido de un archivo entre dos marcadores
 # Usado para extraer entre "---BEGIN CERTIFICATE---" y "---END CERTIFICATE---"
@@ -200,6 +200,9 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
         self.disableCheckbox = JCheckBox("Disable extension", False)  # por defecto false
         self.panel.add(self._makeFieldPanelCheckbox(self.disableCheckbox))
 
+        self.overwriteCheckbox = JCheckBox("Overwrite headers", False)  # por defecto false
+        self.panel.add(self._makeFieldPanelCheckbox(self.overwriteCheckbox))
+
         self._makeSeparator()
         # ----------------- Log -----------------
         self._makeSectionTitle("Log")
@@ -280,6 +283,18 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
                     self._log("Skipping - Host Filter missmatch. Received: %s | Expected: %s" % (host_value, filter_host_header) )
                     return
 
+            new_headers = list()
+
+            # Filtro "overwrite checkbox"
+            if self.overwriteCheckbox.isSelected():
+                for header in headers:
+                    if header.split(":")[0].lower() not in ["psu-ip-address","tpp-redirect-uri","tpp-redirect-preferred","authorization",
+                                                            "x-request-id","digest","signature","tpp-signature-certificate"]:
+                        new_headers.append(header)
+            else:
+                new_headers = headers
+
+            
             cert_path = self.certField.getText().strip()
             key_path = self.keyField.getText().strip()
             if not cert_path:
@@ -297,9 +312,9 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
                 "Authorization": self.authField.getText().strip()
             }
 
-            new_headers = list(headers)
 
-            # AÃ±adiendo cabeceras obligatorias
+
+            # Anadiendo cabeceras obligatorias
             for k, v in extra_headers.items():
                 if v and len(v) > 0:
                     new_headers.append(k + ": " + v)
@@ -308,7 +323,7 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
                     self._log("Skipping - Mandatory header %s missing value" % k)
                     return
             
-            # AÃ±adiendo cabeceras de firma
+            # Anadiendo cabeceras de firma
             try:
                 sig_headers = get_signature_headers(body_str, cert_path, key_path)
                 for k, v in sig_headers.items():
