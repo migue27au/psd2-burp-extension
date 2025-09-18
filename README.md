@@ -12,6 +12,7 @@ You can also configure static headers (PSU-IP-Address, TPP-Redirect-URI, TPP-Red
 - New Burp tab to configure:
   - Private key and certificate paths
   - Static header values
+    - Enable / Disable add this header automatically with Checkbox
   - Host header filter
   - Enable/disable switch
   - Enable/disable overwrite Redsys headers.
