@@ -12,7 +12,7 @@ from java.io import FileInputStream, ByteArrayInputStream
 import re
 
 PSD2_EXTENSION_NAME = "PSD2-Redsys"
-PSD2_EXTENSION_VERSION = "V.1.1"
+PSD2_EXTENSION_VERSION = "V.1.2"
 
 # Extrae el contenido de un archivo entre dos marcadores
 # Usado para extraer entre "---BEGIN CERTIFICATE---" y "---END CERTIFICATE---"
@@ -118,6 +118,14 @@ def get_signature_headers(payload_str, cert_path, key_path):
 # -----------------------------
 class BurpExtender(IBurpExtender, ITab, IHttpListener):
     
+    def _makeFieldPanelWithCheckbox(self, label, field, checkbox):
+        panel = JPanel(FlowLayout(FlowLayout.LEFT))
+        panel.add(checkbox)
+        panel.add(JLabel(label))
+        field.setPreferredSize(Dimension(300, 25))
+        panel.add(field)
+        return panel
+
     # Custom UI methods
     def _makeFieldPanel(self, label, field):
         panel = JPanel(FlowLayout(FlowLayout.LEFT))
@@ -155,8 +163,9 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
         self._callbacks = callbacks
         self._helpers = callbacks.getHelpers()
 
-        callbacks.setExtensionName("PSD2 Extension")
+        callbacks.setExtensionName(PSD2_EXTENSION_NAME)
         self._log("Extension %s loaded. %s" % (PSD2_EXTENSION_NAME, PSD2_EXTENSION_VERSION))
+
 
         # UI
         self.panel = JPanel()
@@ -177,20 +186,24 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
         # ----------------- Headers -----------------
         self._makeSectionTitle("Authorization header")
         self.authField = JTextField()
-        self.panel.add(self._makeFieldPanel("Authorization:", self.authField))
+        self.authCheckbox = JCheckBox("", True)
+        self.panel.add(self._makeFieldPanelWithCheckbox("Authorization:", self.authField, self.authCheckbox))
 
         self._makeSeparator()
         # ----------------- Headers -----------------
         self._makeSectionTitle("PSD2 mandatory headers")
 
         self.psuIpField = JTextField("127.0.0.1")
-        self.panel.add(self._makeFieldPanel("PSU-IP-Address:", self.psuIpField))
+        self.psuIpCheckbox = JCheckBox("", True)
+        self.panel.add(self._makeFieldPanelWithCheckbox("PSU-IP-Address:", self.psuIpField, self.psuIpCheckbox))
         
         self.tppRedirectUriField = JTextField("http://localhost:8080/callback")
-        self.panel.add(self._makeFieldPanel("TPP-Redirect-URI:", self.tppRedirectUriField))
+        self.tppRedirectUriCheckbox = JCheckBox("", True)
+        self.panel.add(self._makeFieldPanelWithCheckbox("TPP-Redirect-URI:", self.tppRedirectUriField, self.tppRedirectUriCheckbox))
         
         self.tppRedirectPreferredField = JTextField("true")
-        self.panel.add(self._makeFieldPanel("TPP-Redirect-Preferred:", self.tppRedirectPreferredField))
+        self.tppRedirectPreferredCheckbox = JCheckBox("", True)
+        self.panel.add(self._makeFieldPanelWithCheckbox("TPP-Redirect-Preferred:", self.tppRedirectPreferredField, self.tppRedirectPreferredCheckbox))
 
         self._makeSeparator()
         # ----------------- Filter -----------------
@@ -284,18 +297,6 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
                     self._log("Skipping - Host Filter missmatch. Received: %s | Expected: %s" % (host_value, filter_host_header) )
                     return
 
-            new_headers = list()
-
-            # Filtro "overwrite checkbox"
-            if self.overwriteCheckbox.isSelected():
-                for header in headers:
-                    if header.split(":")[0].lower() not in ["psu-ip-address","tpp-redirect-uri","tpp-redirect-preferred","authorization",
-                                                            "x-request-id","digest","signature","tpp-signature-certificate"]:
-                        new_headers.append(header)
-            else:
-                new_headers = headers
-
-            
             cert_path = self.certField.getText().strip()
             key_path = self.keyField.getText().strip()
             if not cert_path:
@@ -305,14 +306,35 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
                 self._log("Skipping - Private key unassigned")
                 return
 
-            # Mandatory headers + Authorization header
-            extra_headers = {
-                "PSU-IP-Address": self.psuIpField.getText().strip(),
-                "TPP-Redirect-URI": self.tppRedirectUriField.getText().strip(),
-                "TPP-Redirect-Preferred": self.tppRedirectPreferredField.getText().strip(),
-                "Authorization": self.authField.getText().strip()
-            }
+            new_headers = list()
 
+            # Mandatory headers + Authorization header
+            extra_headers = {}
+
+            # Filtro checkbox "add this header"
+            if self.psuIpCheckbox.isSelected():
+                extra_headers["PSU-IP-Address"] = self.psuIpField.getText().strip()
+            if self.tppRedirectUriCheckbox.isSelected():
+                extra_headers["TPP-Redirect-URI"] = self.tppRedirectUriField.getText().strip()
+            if self.tppRedirectPreferredCheckbox.isSelected():
+                extra_headers["TPP-Redirect-Preferred"] = self.tppRedirectPreferredField.getText().strip()
+            if self.authCheckbox.isSelected():
+                extra_headers["Authorization"] = self.authField.getText().strip()
+
+            # Filtro "overwrite checkbox"
+            extensions_to_overwrite = ["x-request-id","digest","signature","tpp-signature-certificate",
+                                        #"psu-ip-address","tpp-redirect-uri","tpp-redirect-preferred","authorization",
+                                        ]
+            # Añado a las extensions a sobreescribir las que están marcadas con el checkbox (extra-headers)
+            for header in extra_headers.keys():
+                extensions_to_overwrite.append(header.lower())
+
+            if self.overwriteCheckbox.isSelected():
+                for header in headers:
+                    if header.split(":")[0].lower() not in extensions_to_overwrite:
+                        new_headers.append(header)
+            else:
+                new_headers = headers    
 
 
             # Anadiendo cabeceras obligatorias
