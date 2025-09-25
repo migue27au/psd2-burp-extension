@@ -12,7 +12,11 @@ from java.io import FileInputStream, ByteArrayInputStream
 import re
 
 PSD2_EXTENSION_NAME = "PSD2-Redsys"
-PSD2_EXTENSION_VERSION = "V.1.2"
+PSD2_EXTENSION_VERSION = "V.1.3"
+
+HIGHLIGHT_COLOR = "yellow"
+PSD2_CERTIFICATE_EXTENSIONS = ["x-request-id","digest","signature","tpp-signature-certificate"]
+                            #"psu-ip-address","tpp-redirect-uri","tpp-redirect-preferred","authorization",
 
 # Extrae el contenido de un archivo entre dos marcadores
 # Usado para extraer entre "---BEGIN CERTIFICATE---" y "---END CERTIFICATE---"
@@ -112,6 +116,15 @@ def get_signature_headers(payload_str, cert_path, key_path):
         "Signature": signature_header,
         "TPP-Signature-Certificate": cert_b64
     }
+
+def isPSD2Request(headers):
+    psd2_mandatory_headers_counter = 0
+    for header in headers:
+        if header.split(":")[0].lower() in PSD2_CERTIFICATE_EXTENSIONS:
+            psd2_mandatory_headers_counter += 1
+
+    return (psd2_mandatory_headers_counter >= 4)
+
 
 # -----------------------------
 # Burp extension + UI
@@ -233,6 +246,8 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
         callbacks.registerHttpListener(self)
 
         self.TOOL_REPEATER = callbacks.TOOL_REPEATER
+        self.TOOL_PROXY = callbacks.TOOL_PROXY
+        self.TOOL_TARGET = callbacks.TOOL_TARGET
 
     # Burp UI Mandatory - Tab Name
     def getTabCaption(self):
@@ -270,20 +285,28 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
     def processHttpMessage(self, toolFlag, messageIsRequest, messageInfo):
         if not messageIsRequest:
             return
-        if toolFlag != self.TOOL_REPEATER:
-            return
-
-        # Filtro "disable checkbox"
-        if self.disableCheckbox.isSelected():
-            self._log("Skipping - Extension disabled")
-            return
-
+        
         try:
             request_bytes = messageInfo.getRequest()
             analyzed = self._helpers.analyzeRequest(request_bytes)
             headers = list(analyzed.getHeaders())
             body_bytes = request_bytes[analyzed.getBodyOffset():]
             body_str = self._helpers.bytesToString(body_bytes)
+            
+            # Comprueba si interceptada por proxy/target y higlight si es de psd2
+            if toolFlag in [self.TOOL_TARGET, self.TOOL_PROXY]:
+                if isPSD2Request(headers):
+                    messageInfo.setHighlight(HIGHLIGHT_COLOR)
+                return
+
+            # Comprueba si interceptada por repeter
+            if toolFlag != self.TOOL_REPEATER:
+                return
+
+            # Filtro "disable checkbox"
+            if self.disableCheckbox.isSelected():
+                self._log("Skipping - Extension disabled")
+                return
 
             # Filtro cabecera host
             filter_host_header = self.filterHostHeaderField.getText().strip()
@@ -322,10 +345,11 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
                 extra_headers["Authorization"] = self.authField.getText().strip()
 
             # Filtro "overwrite checkbox"
-            extensions_to_overwrite = ["x-request-id","digest","signature","tpp-signature-certificate",
-                                        #"psu-ip-address","tpp-redirect-uri","tpp-redirect-preferred","authorization",
-                                        ]
             # Añado a las extensions a sobreescribir las que están marcadas con el checkbox (extra-headers)
+            extensions_to_overwrite = []
+            for header in PSD2_CERTIFICATE_EXTENSIONS:
+                extensions_to_overwrite.append(header)
+
             for header in extra_headers.keys():
                 extensions_to_overwrite.append(header.lower())
 
@@ -360,6 +384,9 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
             # Actualiza la request interceptada
             new_request = self._helpers.buildHttpMessage(new_headers, body_bytes)
             messageInfo.setRequest(new_request)
+
+            # Actualiza la request a amarillo si es interceptada
+            messageInfo.setHighlight(HIGHLIGHT_COLOR)
 
         except Exception as e:
             self._log("ERROR > %s" % str(e))
